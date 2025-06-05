@@ -1,0 +1,138 @@
+﻿@{
+    ViewData["Title"] = "Чат";
+}
+
+<div class="container">
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="text-center">Чат комната</h2>
+                </div>
+                <div class="card-body">
+                    <div class="row p-3">
+                        <div class="col-12">
+                            <ul id="messagesList" class="list-unstyled" style="height: 300px; overflow-y: auto;"></ul>
+                        </div>
+                    </div>
+                    <div class="row px-3">
+                        <div class="col-4">
+                            <input type="text" id="userInput" class="form-control" placeholder="Ваше имя" />
+                        </div>
+                        <div class="col-6">
+                            <input type="text" id="messageInput" class="form-control" placeholder="Ваше сообщение" />
+                        </div>
+                        <div class="col-2">
+                            <button type="button" id="sendButton" class="btn btn-primary">Отправить</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.message {
+    padding: 5px 10px;
+    border-radius: 5px;
+    background-color: #f8f9fa;
+    margin-bottom: 5px;
+}
+
+.message .time {
+    font-size: 0.8em;
+    margin-right: 8px;
+}
+
+.message .user {
+    color: #0056b3;
+}
+
+#messagesList {
+    padding: 15px;
+    background-color: white;
+    border: 1px solid #dee2e6;
+    border-radius: 5px;
+}
+</style>
+
+@section Scripts {
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/7.0.2/signalr.min.js"></script>
+    <script>
+        const connection = new signalR.HubConnectionBuilder()
+            .withUrl("/chatHub")
+            .withAutomaticReconnect()
+            .build();
+
+        connection.on("ReceiveMessage", (user, message, timestamp) => {
+            const li = document.createElement("li");
+            const time = new Date(timestamp).toLocaleTimeString();
+            li.className = "mb-2";
+            li.innerHTML = `<div class="message">
+                <span class="time text-muted">[${time}]</span>
+                <strong class="user">${user}</strong>: 
+                <span class="text">${message}</span>
+            </div>`;
+            document.getElementById("messagesList").appendChild(li);
+            messagesList.scrollTop = messagesList.scrollHeight;
+        });
+
+        connection.on("LoadMessages", (messages) => {
+            const messagesList = document.getElementById("messagesList");
+            messagesList.innerHTML = "";
+            messages.forEach(msg => {
+                const li = document.createElement("li");
+                const time = new Date(msg.timestamp).toLocaleTimeString();
+                li.className = "mb-2";
+                li.innerHTML = `<div class="message">
+                    <span class="time text-muted">[${time}]</span>
+                    <strong class="user">${msg.userName}</strong>: 
+                    <span class="text">${msg.text}</span>
+                </div>`;
+                messagesList.appendChild(li);
+            });
+            messagesList.scrollTop = messagesList.scrollHeight;
+        });
+
+        async function start() {
+            try {
+                await connection.start();
+                console.log("SignalR Connected.");
+                await connection.invoke("LoadMessages");
+            } catch (err) {
+                console.log(err);
+                setTimeout(start, 5000);
+            }
+        };
+
+        connection.onclose(async () => {
+            await start();
+        });
+
+        start();
+
+        document.getElementById("sendButton").addEventListener("click", event => {
+            const user = document.getElementById("userInput").value;
+            const message = document.getElementById("messageInput").value;
+            if (user && message) {
+                connection.invoke("SendMessage", user, message).catch(err => console.error(err.toString()));
+                document.getElementById("messageInput").value = "";
+            }
+        });
+
+        document.getElementById("messageInput").addEventListener("keypress", event => {
+            if (event.key === "Enter") {
+                event.preventDefault();
+                document.getElementById("sendButton").click();
+            }
+        });
+
+        // Сохраняем имя пользователя в localStorage
+        const userInput = document.getElementById("userInput");
+        userInput.value = localStorage.getItem("chatUserName") || "";
+        userInput.addEventListener("change", () => {
+            localStorage.setItem("chatUserName", userInput.value);
+        });
+    </script>
+}
